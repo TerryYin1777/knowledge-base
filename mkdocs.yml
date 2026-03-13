@@ -1,5 +1,6 @@
 site_name: Knowledge Base
 site_description: Personal research reports and technical notes
+docs_dir: .
 theme:
   name: material
   palette:
