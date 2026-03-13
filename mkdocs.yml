@@ -1,0 +1,29 @@
+site_name: Knowledge Base
+site_description: Personal research reports and technical notes
+theme:
+  name: material
+  palette:
+    scheme: slate
+    primary: indigo
+    accent: indigo
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.expand
+    - search.highlight
+    - search.suggest
+    - toc.follow
+
+markdown_extensions:
+  - tables
+  - fenced_code
+  - toc:
+      permalink: true
+  - admonition
+  - pymdownx.highlight
+  - pymdownx.superfences
+
+nav:
+  - Home: README.md
+  - CDC Aurora → Iceberg: cdc-aurora-iceberg-report.md
+  - Lakehouse on S3: lakehouse-s3-report.md
