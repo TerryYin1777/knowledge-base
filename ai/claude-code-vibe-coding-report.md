@@ -10,7 +10,7 @@
 
 1. [What Is Claude Code — Architecture & How It Works](#1-what-is-claude-code--architecture--how-it-works)
 2. [Core Features & Usage](#2-core-features--usage)
-3. [MCP (Model Context Protocol) — The Plugin System](#3-mcp-model-context-protocol--the-plugin-system)
+3. [Extension Points: Skills, MCP, Plugins, Hooks & More](#3-extension-points-skills-mcp-plugins-hooks--more)
 4. [Productivity Tips & Tricks](#4-productivity-tips--tricks)
 5. [Spec-Driven Development](#5-spec-driven-development)
 6. [Vibe Coding — State of the Art in 2025](#6-vibe-coding--state-of-the-art-in-2025)
@@ -290,37 +290,74 @@ This last pattern is powerful. Prompting Claude to ask you questions before it s
 
 ---
 
-## 3. MCP (Model Context Protocol) — The Plugin System
+## 3. Extension Points: Skills, MCP, Plugins, Hooks & More {#3-extension-points-skills-mcp-plugins-hooks--more}
 
-### What MCP Is and Why It Matters
+Claude Code has **six distinct ways to extend its behavior**. Most developers conflate them or don't know all six exist. Each answers a different question:
 
-Model Context Protocol (MCP) is an open standard that lets Claude Code talk to external tools and services. Think of it as a USB-C port for AI — a universal adapter that lets Claude connect to databases, APIs, browsers, file systems, and anything else you can expose as an MCP server.
+| Question | Mechanism |
+|----------|-----------|
+| What should Claude *know how to do*? | **Skills** |
+| What external tools can Claude *access*? | **MCP** |
+| Who does the work? | **Sub-agents** |
+| When should things happen *automatically*? | **Hooks** |
+| How do you *package and share* all of the above? | **Plugins** |
+| Quick prompt shortcuts? | **Slash Commands** |
 
-The three parts:
-- **Host:** Claude Code (makes the requests)
-- **Client:** The MCP client library (handles communication)
-- **Server:** The tool/service (exposes capabilities)
+Understanding which one to reach for — and why — is one of the highest-leverage things you can learn.
 
-Without MCP, Claude Code can only touch your local filesystem and run bash commands. With MCP, it can query your Postgres database, file GitHub issues, render a webpage, and look up live documentation — all without leaving your terminal.
+---
 
-MCP has become the industry standard. Cursor, Windsurf, and other tools all support it. Servers you build work across tools.
+### Skills: Procedural Knowledge, Token-Efficient
 
-### How to Install and Configure MCP Servers
+**Skills teach Claude how to perform tasks.** They're folders containing a `SKILL.md` file with instructions, plus optional scripts and resources. Think of them as reusable playbooks.
 
-MCP servers are configured in a JSON file. For Claude Code, you can add them via the CLI:
+**How they work:**
 
-```bash
-# Add an MCP server
-claude mcp add <server-name> --command <npx-command> [--args ...]
+Skills use progressive disclosure to stay efficient:
+1. Claude loads only names and descriptions at session start (~30–50 tokens per skill)
+2. When a skill matches the current task, full instructions load
+3. Scripts and files load only when actually needed
 
-# List configured servers
-claude mcp list
+This means you can have 100+ skills installed without burning context. Claude loads what it needs, when it needs it.
 
-# Remove a server
-claude mcp remove <server-name>
+**Skill structure:**
+```
+.claude/skills/code-review/
+└── SKILL.md
 ```
 
-Or directly in `~/.claude/mcp.json`:
+```markdown
+---
+name: code-review
+description: Security-focused code review following OWASP guidelines
+---
+
+When reviewing code:
+1. Check for injection vulnerabilities (SQL, XSS, command injection)
+2. Verify authentication and authorization patterns
+3. Look for sensitive data exposure
+4. Check error handling for information leakage
+
+Flag issues with severity: CRITICAL, HIGH, MEDIUM, LOW
+```
+
+**Skills are cross-platform** — the same skill file works in Claude.ai, Claude Code, Codex, and Gemini CLI. They've been adopted as a shared Agent Skills standard.
+
+**When to use Skills:**
+- Repeatable procedures Claude should follow (code review process, deployment checklist)
+- Domain knowledge you want available across sessions
+- Best practices and conventions specific to your project
+- Anything where you're teaching *how to do something*, not *accessing something*
+
+---
+
+### MCP: External Tool Connections
+
+**MCP gives Claude hands to reach outside its sandbox.** Model Context Protocol is an open standard for connecting Claude to databases, APIs, browsers, GitHub, and anything else you expose as a server.
+
+MCP doesn't tell Claude what to do — Skills do that. MCP gives Claude *access* to external systems so it can act on them.
+
+**Configure in `~/.claude/mcp.json` or `.claude/mcp.json`:**
 
 ```json
 {
@@ -328,125 +365,167 @@ Or directly in `~/.claude/mcp.json`:
     "github": {
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-github"],
-      "env": {
-        "GITHUB_TOKEN": "your-token-here"
-      }
+      "env": { "GITHUB_TOKEN": "your-token" }
     },
     "postgres": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://localhost/mydb"]
+      "args": ["-y", "@modelcontextprotocol/server-postgres",
+               "postgresql://localhost/mydb"]
     }
   }
 }
 ```
 
-MCP servers can be scoped:
-- **Global** (`~/.claude/mcp.json`) — available in all sessions
-- **Project** (`.claude/mcp.json`) — available only in this project
+**The token problem:** MCP tool definitions consume context upfront. A five-server setup can use 55,000+ tokens before any conversation starts. GitHub's official MCP alone uses tens of thousands. Anthropic's **Tool Search** feature (on Opus 4) discovers tools on-demand instead, reducing token usage by ~85%. Use it when you have many MCP servers configured.
 
-Use project-scope for project-specific databases and APIs. Use global scope for tools you always want (GitHub, filesystem, etc.).
+**Essential MCP servers:**
 
-### Must-Have MCP Servers for Developers
+| Server | Install | What it does |
+|--------|---------|--------------|
+| **GitHub** | `npx @modelcontextprotocol/server-github` | Issues, PRs, commits, CI — stay in terminal |
+| **Filesystem** | `npx @modelcontextprotocol/server-filesystem` | Secure file access beyond cwd |
+| **PostgreSQL** | `npx @modelcontextprotocol/server-postgres` | Query, explore schema, generate migrations |
+| **Playwright** | `npx @playwright/mcp` | Real browser — UI testing, scraping, screenshots |
+| **Context7** | `npx -y @upstash/context7-mcp@latest` | Live docs for any library (eliminates hallucinated APIs) |
+| **Memory** | `npx @modelcontextprotocol/server-memory` | Persistent knowledge graph across sessions |
+| **Sequential Thinking** | `npx @modelcontextprotocol/server-sequential-thinking` | Structured reasoning for complex problems |
+| **Tavily/Brave** | Various | Web search during sessions |
 
-#### 1. GitHub MCP Server
-**Install:** `npm install -g @modelcontextprotocol/server-github`
+**Scoping:** Use global scope (`~/.claude/mcp.json`) for tools you always want. Use project scope (`.claude/mcp.json`) for project-specific databases and APIs.
 
-Connects Claude to GitHub's API. Lets Claude:
-- Read and create issues
-- Manage pull requests (comment, merge, review)
-- Search commits and code
-- Trigger and inspect CI/CD runs
+**When to use MCP:**
+- You need Claude to access external systems (GitHub, databases, browsers)
+- Real-time data is required
+- The tool needs to execute actions, not just provide guidance
 
-```
-> Find all open issues labeled 'bug' and group them by affected component
-> Create a PR review comment on line 47 of auth.py suggesting using bcrypt instead of SHA-256
-```
+---
 
-This transforms your code review workflow. You stay in the terminal; Claude handles the GitHub interface.
+### Plugins: Shareable Bundles
 
-#### 2. Filesystem MCP Server
-**Install:** `npx @modelcontextprotocol/server-filesystem`
-
-Extends file access beyond the current working directory. Useful when you have projects spread across multiple directories or when you want to give Claude access to documentation/config stored elsewhere.
-
-#### 3. PostgreSQL MCP Server
-**Install:** `npx @modelcontextprotocol/server-postgres`
-
-Direct database access. Claude can:
-- Write and explain queries
-- Explore schema
-- Debug data issues
-- Generate migration scripts based on actual schema inspection
+**Plugins package multiple customizations into a single distributable unit.** A plugin can contain skills, sub-agents, hooks, MCP configs, and slash commands — everything needed for a complete workflow.
 
 ```
-> Look at the users table schema and generate a SQLAlchemy model for it
-> Find all queries that don't use indexes and suggest fixes
+my-plugin/
+├── .claude-plugin/
+│   └── plugin.json       # metadata
+├── skills/               # bundled skills
+├── agents/               # specialized sub-agents
+├── hooks/                # lifecycle automation
+├── .mcp.json             # MCP server configs
+└── README.md
 ```
 
-As a data engineer, you'll find this particularly valuable. Claude can reason about your actual data structure, not a hypothetical one.
-
-#### 4. SQLite MCP Server
-Same pattern, lighter weight. Good for local dev databases, prototyping, or when you're building data pipelines that use SQLite as an intermediate store.
-
-#### 5. Playwright / Browser MCP Server
-**Install:** `npx @playwright/mcp`
-
-Gives Claude a real browser. Use cases:
-- Testing UI flows end-to-end
-- Scraping documentation
-- Verifying your web app works after changes
-- Debugging frontend issues with actual screenshots
-
-```
-> Open the app at localhost:3000, log in with test credentials, and verify the dashboard loads user data correctly
+**Install a plugin:**
+```bash
+/plugin install github.com/username/my-plugin
+/plugin list
+/plugin disable my-plugin
 ```
 
-#### 6. Memory / Knowledge Graph MCP Server
-**Install:** `npx @modelcontextprotocol/server-memory`
+**When to use Plugins:**
+- Sharing a complete workflow with teammates
+- Multiple customizations that work together as a unit
+- Distributing through a marketplace
+- Team standardization
 
-Gives Claude persistent, structured memory that survives beyond CLAUDE.md. Good for:
-- Tracking decisions across long projects
-- Building up knowledge about your codebase over time
-- Remembering preferences and patterns
+Plugins are how you turn a personal workflow into something shareable. Build it with skills and hooks first, then wrap it in a plugin when it's stable and you want others to use it.
 
-#### 7. Context7 — Live Documentation
-**Install:** `npx -y @upstash/context7-mcp@latest`
+---
 
-One of the most valuable MCP servers for app developers. Context7 pulls fresh documentation for libraries and frameworks directly into Claude's context. Instead of Claude hallucinating about an API that changed six months ago, it reads the actual current docs.
+### Hooks: Deterministic Automation
+
+**Hooks execute shell commands at specific lifecycle points.** Unlike skills (AI follows instructions), hooks are pure automation — when the trigger fires, the command runs, no AI involved.
+
+**Available hook points:**
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [{
+      "matcher": "Edit",
+      "command": "npm run lint --fix $FILE"
+    }],
+    "PostToolUse": [{
+      "matcher": "Write",
+      "command": "./scripts/notify-slack.sh 'File created: $FILE'"
+    }],
+    "SessionStart": [{
+      "command": "echo 'Session started' >> ~/.claude/session.log"
+    }]
+  }
+}
+```
+
+**Hook points:** `PreToolUse`, `PostToolUse`, `PermissionRequest`, `SessionStart`
+
+**Skills vs Hooks:**
+- **Skills** = guidance Claude *should* follow (best practices, conventions)
+- **Hooks** = actions that *must* happen (linting, formatting, notifications)
+
+Use hooks for hard requirements and quality gates. Use skills for best practices.
+
+**When to use Hooks:**
+- Enforcing quality gates (lint before edit, test after write)
+- Notifications and logging
+- Auto-formatting or validation
+- CI/CD integration triggers
+
+---
+
+### Sub-agents: Parallel Work
+
+Sub-agents are separate Claude instances that handle tasks in isolation. Each gets its own context window, tools, and permissions. They work independently and report results back to the orchestrator.
 
 ```
-> Using the latest FastAPI docs, show me how to implement OAuth2 with JWT tokens
+"Use the code-reviewer sub-agent to check the auth module"
+→ Sub-agent works independently
+→ Returns summary to main session
 ```
 
-Without Context7, Claude's knowledge of libraries is frozen at its training cutoff. With it, you always get current docs.
+Use sub-agents when:
+- The main context window is getting full
+- You want to parallelize independent tasks
+- A task needs isolated permissions (e.g., only read access)
 
-#### 8. Web Search MCP Server
-**Install:** Various (Tavily, Brave, Perplexity all have MCP servers)
+---
 
-Lets Claude search the web during a session. Useful for:
-- Looking up error messages you haven't seen before
-- Finding recent blog posts about a library
-- Checking if a bug has a known fix
+### Slash Commands: Prompt Shortcuts
 
-#### 9. Docker MCP Toolkit
-Docker provides a curated set of MCP servers in a containerized format — useful for teams who want a consistent, reproducible MCP environment. Install via `docker mcp toolkit`.
+Slash commands are templates for frequently-used prompts. A file at `.claude/commands/pr.md` creates `/pr`.
 
-#### 10. Sequential Thinking MCP Server
-**Install:** `npm install -g @modelcontextprotocol/server-sequential-thinking`
+```markdown
+# .claude/commands/pr.md
+Create a pull request for the current branch.
+1. Run git diff against main
+2. Summarize all changes  
+3. Generate a PR title and description
+4. Use gh cli to create the PR
+```
 
-Guides Claude through complex multi-step reasoning. Particularly helpful for architecture decisions and debugging gnarly problems where the temptation to jump to a solution is strong.
+Slash commands have been partially merged into the Skills system. The distinction:
+- **Commands:** Simple prompt templates, always user-invoked
+- **Skills:** Can include scripts, resources, and auto-trigger based on context
 
-### How MCP Extends Claude Code's Capabilities
+For simple shortcuts, use commands. For anything more complex, use skills.
 
-Without MCP, Claude Code is a powerful but isolated tool. With MCP:
+---
 
-- **Database queries** happen in real time against your actual data
-- **GitHub actions** execute without leaving your terminal
-- **Browser testing** catches regressions automatically
-- **Live documentation** eliminates hallucinated APIs
-- **Web search** brings in information Claude's training data doesn't have
+### Quick Decision Guide
 
-For a data engineer building app features, the database and GitHub MCP servers alone will pay for the learning curve many times over.
+| Scenario | Use |
+|----------|-----|
+| Access GitHub repos | MCP |
+| Follow coding standards | Skill |
+| Auto-lint on every file save | Hook |
+| Share team workflow | Plugin |
+| Query a database | MCP |
+| Run a complex code review process | Skill |
+| Parallelize 3 independent tasks | Sub-agents |
+| Quick PR creation shortcut | Slash Command |
+| Teach Claude your deployment process | Skill |
+| Connect to a new API | MCP |
+
+**Practical starting point:** Most developers need 2–3 MCP servers (GitHub + database + one domain-specific) plus a few custom skills for their workflow patterns. Add hooks when you need quality gates. Build plugins only when you want to share things with a team.
 
 ---
 
