@@ -12,7 +12,7 @@
 2. [Core Features & Usage](#2-core-features--usage)
 3. [Extension Points: Skills, MCP, Plugins, Hooks & More](#3-extension-points-skills-mcp-plugins-hooks--more)
 4. [Productivity Tips & Tricks](#4-productivity-tips--tricks)
-5. [Spec-Driven Development](#5-spec-driven-development)
+5. [Spec-Driven Development](#5-spec-driven-development) — incl. [OpenSpec](#openspec)
 6. [Vibe Coding — State of the Art in 2025](#6-vibe-coding--state-of-the-art-in-2025)
 7. [Recommended Workflow](#7-recommended-workflow)
 
@@ -879,6 +879,117 @@ The pattern from practitioners:
 4. **Update the spec when requirements change.** Never just tell Claude "actually, do it differently." Update the spec first, then ask Claude to re-implement based on the updated spec.
 
 5. **Post-implementation, archive the spec with a link to the PR.** Future-you will thank present-you.
+
+---
+
+### OpenSpec: A Dedicated SDD Tool for Brownfield Codebases {#openspec}
+
+If you want to go deeper than a CLAUDE.md-based workflow, **OpenSpec** is the most Claude Code-friendly dedicated spec-driven development tool available in 2026.
+
+**What it is:** An open-source CLI framework (MIT license, 30k+ GitHub stars) that enforces a strict three-phase state machine — Proposal → Apply → Archive — before any code is written. Built by Fission AI, it integrates natively with Claude Code, Cursor, GitHub Copilot, Cline, Windsurf, and 20+ other tools.
+
+**Why it's designed for brownfield (existing codebases):** Unlike greenfield tools that assume you're starting fresh, OpenSpec's killer feature is **delta markers** — every spec change is explicitly categorized as `ADDED`, `MODIFIED`, or `REMOVED` relative to what already exists. This forces precision: you can't vaguely say "update the auth system." You have to say what specifically changes.
+
+#### How OpenSpec Works
+
+**Install:**
+```bash
+npm install -g @fission-ai/openspec
+openspec init
+```
+
+This creates an `openspec/` directory in your repo:
+
+```
+openspec/
+├── project.md           # current state of the project
+├── specs/               # current-state specs (what exists today)
+└── changes/             # active proposals
+    └── add-2fa/
+        ├── proposal.md  # what you want to build + why
+        ├── tasks.md     # discrete implementation steps
+        └── delta/       # ADDED/MODIFIED/REMOVED specs
+```
+
+**The three-phase workflow:**
+
+**Phase 1 — Proposal**
+```bash
+/openspec:proposal "Add two-factor authentication to user login"
+```
+Claude generates a `proposal.md` with:
+- Summary of the change
+- Delta specs (what's ADDED / MODIFIED / REMOVED)
+- Acceptance criteria (GIVEN/WHEN/THEN format)
+- Implementation tasks
+
+**You review and approve before any code is written.** This is the explicit human gate.
+
+**Phase 2 — Apply**
+```bash
+/openspec:apply add-2fa
+```
+Claude implements the approved proposal, guided by the delta specs and tasks.
+
+**Phase 3 — Archive**
+```bash
+/openspec:archive add-2fa
+```
+The completed proposal moves to `openspec/archive/` with a link to the PR. Full audit trail preserved.
+
+**Validation:**
+```bash
+openspec validate --strict
+```
+Catches missing acceptance criteria scenarios before you start implementing.
+
+#### OpenSpec vs Rolling Your Own Specs
+
+| | Rolling Your Own (CLAUDE.md) | OpenSpec |
+|--|--|--|
+| Setup | Minimal | `npm install -g` |
+| Structure | You define it | Enforced 3-phase state machine |
+| Delta tracking | Manual | Built-in ADDED/MODIFIED/REMOVED |
+| Audit trail | As good as you are | Automatic via archive phase |
+| Human approval gate | Honor system | Enforced — no code without proposal |
+| Multi-tool support | Via CLAUDE.md | 20+ native integrations |
+| Best for | Greenfield, simple features | Brownfield, iterative changes |
+
+#### OpenSpec vs Other SDD Tools (2026)
+
+| Tool | Spec Type | Best For | Cost |
+|------|-----------|----------|------|
+| **OpenSpec** | Semi-living (delta) | Brownfield iterative changes | Free (OSS) |
+| **GitHub Spec Kit** | Static markdown | Greenfield, cross-agent portability | Free (OSS) |
+| **Amazon Kiro** | Static (EARS notation) | AWS-native greenfield | Free tier + credits |
+| **Augment Intent** | Living (bidirectional) | Complex multi-service codebases | $60/mo+ |
+| **BMAD-METHOD** | Static (docs-as-code) | Enterprise planning, role-based agents | Free (OSS) |
+
+**When to use OpenSpec:**
+- You're modifying an existing codebase (brownfield) rather than starting fresh
+- You want explicit approval gates before implementation begins
+- You need an audit trail of why changes were made
+- You want lighter-weight specs (~250 lines vs ~800 for Spec Kit)
+- You want native Claude Code integration via slash commands
+
+**When NOT to use OpenSpec:**
+- Tiny bug fixes or isolated changes where the ceremony isn't worth it
+- You need specs to update automatically during implementation (use Augment Intent instead)
+- You want multi-agent parallel execution (OpenSpec is single-agent)
+
+#### OpenSpec + Claude Code: The Practical Workflow
+
+```
+1. openspec init  (once per project)
+2. /openspec:proposal "Add feature X"  → Claude drafts proposal
+3. You review + approve proposal.md
+4. /openspec:apply feature-x  → Claude implements
+5. /openspec:validate --strict  → catch gaps
+6. PR merged
+7. /openspec:archive feature-x  → audit trail preserved
+```
+
+The combination of OpenSpec's structure with Claude Code's execution makes the SDD workflow significantly more reliable than pure prompt-based development — especially on codebases where "just vibing" leads to unintended regressions.
 
 ---
 
