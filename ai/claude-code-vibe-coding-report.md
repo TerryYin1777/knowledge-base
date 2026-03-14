@@ -296,40 +296,38 @@ Claude Code has **six distinct ways to extend its behavior**. Most developers co
 
 | Question | Mechanism |
 |----------|-----------|
-| What should Claude *know how to do*? | **Skills** |
+| What should Claude *know how to do*? | **Skills / Slash Commands** (same thing) |
 | What external tools can Claude *access*? | **MCP** |
 | Who does the work? | **Sub-agents** |
 | When should things happen *automatically*? | **Hooks** |
 | How do you *package and share* all of the above? | **Plugins** |
-| Quick prompt shortcuts? | **Slash Commands** |
 
 Understanding which one to reach for — and why — is one of the highest-leverage things you can learn.
 
 ---
 
-### Skills: Procedural Knowledge, Token-Efficient
+### Skills = Slash Commands (They're the Same Thing)
 
-**Skills teach Claude how to perform tasks.** They're folders containing a `SKILL.md` file with instructions, plus optional scripts and resources. Think of them as reusable playbooks.
+> **Terminology alert:** "Skills" and "custom slash commands" are the same thing in Claude Code. Both refer to markdown files in `.claude/commands/` that you invoke with `/name`. Official docs now prefer "skills" but you'll see both terms used interchangeably everywhere. Don't let this confuse you.
 
-**How they work:**
+> **⚠️ OpenClaw Skills ≠ Claude Code Skills** — OpenClaw has its own skill system (SKILL.md in a different structure, used by OpenClaw agents). These are completely separate concepts that share a name. This section is about Claude Code skills only.
 
-Skills use progressive disclosure to stay efficient:
-1. Claude loads only names and descriptions at session start (~30–50 tokens per skill)
-2. When a skill matches the current task, full instructions load
-3. Scripts and files load only when actually needed
+**Skills teach Claude how to perform tasks.** A skill is a markdown file (optionally with YAML frontmatter) that lives in `.claude/commands/`. Claude invokes it with `/skill-name`, or can auto-trigger it when the description matches the task.
 
-This means you can have 100+ skills installed without burning context. Claude loads what it needs, when it needs it.
+**Basic skill structure:**
 
-**Skill structure:**
 ```
-.claude/skills/code-review/
-└── SKILL.md
+.claude/commands/
+├── code-review.md      → /code-review
+├── pr.md               → /pr
+└── deploy/
+    └── staging.md      → /deploy:staging
 ```
 
 ```markdown
 ---
-name: code-review
 description: Security-focused code review following OWASP guidelines
+allowed-tools: Read, Grep, Glob
 ---
 
 When reviewing code:
@@ -341,13 +339,38 @@ When reviewing code:
 Flag issues with severity: CRITICAL, HIGH, MEDIUM, LOW
 ```
 
-**Skills are cross-platform** — the same skill file works in Claude.ai, Claude Code, Codex, and Gemini CLI. They've been adopted as a shared Agent Skills standard.
+**Skills can do much more than simple prompts:**
+- Accept arguments via `$ARGUMENTS`
+- Specify which tools are allowed (`allowed-tools` frontmatter)
+- Orchestrate sub-agents inline ("spin up a research agent, then a codebase explorer agent")
+- Run in parallel by spawning multiple sub-agents in a single command
+
+**Example: orchestrating sub-agents from a skill:**
+
+```markdown
+---
+description: Research a problem using web search and codebase exploration
+allowed-tools: Task, WebSearch, WebFetch, Grep, Read, Write
+---
+
+Research: $ARGUMENTS
+
+Launch these sub-agents in parallel:
+1. **Web Agent** — search official docs and GitHub issues
+2. **Codebase Agent** (subagent_type: Explore) — find related patterns in this repo
+
+After both finish, write a summary to docs/research/$ARGUMENTS.md
+```
+
+**Scoping:**
+- **Project:** `.claude/commands/` — committed to git, shared with team
+- **Global:** `~/.claude/commands/` — available in all your projects
 
 **When to use Skills:**
-- Repeatable procedures Claude should follow (code review process, deployment checklist)
-- Domain knowledge you want available across sessions
-- Best practices and conventions specific to your project
-- Anything where you're teaching *how to do something*, not *accessing something*
+- Repeatable procedures Claude should follow (code review, deployment, PR creation)
+- Domain knowledge specific to your project
+- Workflows you want to invoke explicitly with `/name`
+- Orchestrating sub-agents for complex multi-step tasks
 
 ---
 
@@ -489,9 +512,9 @@ Use sub-agents when:
 
 ---
 
-### Slash Commands: Prompt Shortcuts
+### Skills / Slash Commands (Same Thing — Recap)
 
-Slash commands are templates for frequently-used prompts. A file at `.claude/commands/pr.md` creates `/pr`.
+As clarified above: skills and slash commands are the same concept in Claude Code. A file at `.claude/commands/pr.md` creates `/pr`. Simple or complex, they're all "skills" — the official term.
 
 ```markdown
 # .claude/commands/pr.md
@@ -502,11 +525,7 @@ Create a pull request for the current branch.
 4. Use gh cli to create the PR
 ```
 
-Slash commands have been partially merged into the Skills system. The distinction:
-- **Commands:** Simple prompt templates, always user-invoked
-- **Skills:** Can include scripts, resources, and auto-trigger based on context
-
-For simple shortcuts, use commands. For anything more complex, use skills.
+Start simple (no frontmatter needed), add `allowed-tools` and `$ARGUMENTS` when you need more control.
 
 ---
 
@@ -515,13 +534,13 @@ For simple shortcuts, use commands. For anything more complex, use skills.
 | Scenario | Use |
 |----------|-----|
 | Access GitHub repos | MCP |
-| Follow coding standards | Skill |
+| Follow coding standards | Skill (`.claude/commands/`) |
 | Auto-lint on every file save | Hook |
 | Share team workflow | Plugin |
 | Query a database | MCP |
 | Run a complex code review process | Skill |
 | Parallelize 3 independent tasks | Sub-agents |
-| Quick PR creation shortcut | Slash Command |
+| Quick PR creation shortcut | Skill (same as slash command) |
 | Teach Claude your deployment process | Skill |
 | Connect to a new API | MCP |
 
