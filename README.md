@@ -2,13 +2,21 @@
 
 Personal research reports and technical notes.
 
-## Reports
+## Data Platform
 
 | File | Description |
 |------|-------------|
-| [cdc-aurora-iceberg-report.md](cdc-aurora-iceberg-report.md) | CDC: AWS Aurora → Apache Iceberg on S3 — connectors, brokers, stream processors, table formats, architecture patterns |
-| [lakehouse-s3-report.md](lakehouse-s3-report.md) | Data Lakehouse on S3 — table formats, catalogs, query engines, governance, orchestration, architecture patterns |
+| [CDC: Aurora → Iceberg](data-platform/cdc-aurora-iceberg-report.md) | CDC pipelines — connectors, brokers, stream processors, table formats, architecture patterns |
+| [Lakehouse on S3](data-platform/lakehouse-s3-report.md) | Data Lakehouse — table formats, catalogs, query engines, governance, orchestration |
 
-## Structure
+## AI
 
-Reports are added here automatically. Each file is a standalone markdown document.
+| File | Description |
+|------|-------------|
+| [Claude Code & Vibe Coding](ai/claude-code-vibe-coding-report.md) | Claude Code architecture, MCP, spec-driven development, vibe coding best practices |
+
+## General
+
+| File | Description |
+|------|-------------|
+| [Programming Languages](general/programming-languages-report.md) | Overview of major programming languages — history, features, frameworks, use cases |
